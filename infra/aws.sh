@@ -244,6 +244,13 @@ cmd_desplegar() {
     --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text)
   [[ "$endpoint" == "None" ]] && { falla "RDS todavía no terminó de crearse"; exit 1; }
 
+  # Sin estos valores el servicio arranca con un emisor vacío y rechaza todos los tokens,
+  # pero el error recién aparece en los logs varios minutos después. Mejor fallar acá.
+  [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]] && {
+    falla "Faltan AZURE_TENANT_ID o AZURE_CLIENT_ID. Copiá .env.example a .env y completalos."
+    exit 1
+  }
+
   tmp=$(mktemp)  # archivo temporal: la task definition renderizada lleva ARNs y no va al repo
   sed -e "s|__ACCOUNT_ID__|$acc|g" -e "s|__REGISTRO__|$reg|g" -e "s|__TAG__|latest|g" \
       -e "s|__REGION__|$REGION|g" -e "s|__RDS_ENDPOINT__|$endpoint|g" \
@@ -285,7 +292,7 @@ cmd_desplegar() {
     aws ecs create-service --cluster "$CLUSTER" --service-name "$SERVICIO_ECS" \
       --task-definition "$rev" --desired-count 1 --launch-type FARGATE \
       --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG_TAREAS],assignPublicIp=ENABLED}" \
-      --load-balancers "$(IFS=' '; echo "${lb_args[*]}")" >/dev/null
+      --load-balancers "${lb_args[@]}" >/dev/null
     ok "servicio creado"
   fi
   cmd_urls
