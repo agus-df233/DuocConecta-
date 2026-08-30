@@ -1,0 +1,98 @@
+/* Estilos de DuocConecta. Un solo archivo a propósito: la app tiene dos pantallas y no
+   justifica una librería de componentes ni CSS por módulo. */
+
+:root {
+  --azul: #10233F;
+  --azul-claro: #1B4DB1;
+  --amarillo: #FFC22E;
+  --tinta: #1B2333;
+  --tinta-suave: #5A6579;
+  --borde: #D9D5CC;
+  --fondo: #FBFAF7;
+  --rojo: #B3261E;
+  --rojo-fondo: #FDECE7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--tinta);
+  background: var(--fondo);
+  line-height: 1.5;
+}
+
+.logo {
+  display: inline-block;
+  width: 26px; height: 26px;
+  border-radius: 8px 2px 8px 2px;
+  background: var(--amarillo);
+}
+
+/* --- Login: dos columnas, la de la izquierda es la presentación --- */
+.login { display: grid; grid-template-columns: 1.05fr .95fr; min-height: 100vh; }
+@media (max-width: 800px) { .login { grid-template-columns: 1fr; } }
+
+.login-panel {
+  background: var(--azul); color: #FBFAF7;
+  padding: 56px; display: flex; flex-direction: column; justify-content: center;
+}
+.login-panel h1 { font-size: clamp(30px, 4vw, 46px); line-height: 1.05; letter-spacing: -.02em; margin: 20px 0; }
+.login-panel p { color: #B9C6DC; max-width: 44ch; }
+
+.login-form { display: flex; flex-direction: column; justify-content: center; padding: 40px 48px; }
+.login-form h2 { margin: 0 0 6px; }
+
+/* --- Cabecera de la app --- */
+.app header {
+  display: flex; align-items: center; gap: 24px;
+  padding: 14px 28px; background: #fff; border-bottom: 1px solid var(--borde);
+}
+.marca { display: flex; align-items: center; gap: 10px; }
+.app nav { display: flex; gap: 6px; flex: 1; }
+.sesion { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--tinta-suave); }
+
+main { max-width: 780px; margin: 28px auto; padding: 0 20px; }
+
+/* --- Botones --- */
+button {
+  font: inherit; cursor: pointer; border-radius: 8px;
+  padding: 9px 15px; border: 1px solid transparent; background: none; color: var(--tinta);
+}
+button:hover { background: #EEF1F6; }
+button.activo { background: #EEF1F6; font-weight: 600; }
+.principal { background: var(--azul-claro); color: #fff; font-weight: 600; padding: 12px 18px; }
+.principal:hover { background: #16409A; }
+.principal:disabled { opacity: .6; cursor: default; }
+.secundario { border-color: var(--borde); background: #fff; }
+
+/* --- Contenido --- */
+.tarjeta { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 22px; }
+.tarjeta h2 { margin-top: 0; }
+.grilla { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.vacio { text-align: center; padding: 44px 22px; }
+
+.ayuda { font-size: 13px; color: var(--tinta-suave); }
+.cargando { padding: 36px; text-align: center; color: var(--tinta-suave); }
+
+.aviso {
+  background: #FFF9EC; border-left: 3px solid var(--amarillo);
+  padding: 11px 14px; border-radius: 6px; margin: 14px 0; font-size: 14px;
+}
+.error {
+  background: var(--rojo-fondo); border-left: 3px solid var(--rojo);
+  padding: 13px 15px; border-radius: 6px; color: #7A2A0E;
+}
+
+/* --- Formulario --- */
+form { display: grid; gap: 14px; margin-top: 18px; }
+label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; color: var(--tinta-suave); }
+input, textarea {
+  font: inherit; color: var(--tinta);
+  padding: 10px 12px; border: 1px solid var(--borde); border-radius: 8px; background: #fff;
+}
+input:focus, textarea:focus { outline: 2px solid var(--azul-claro); outline-offset: -1px; }
+fieldset { border: 1px solid var(--borde); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+legend { font-size: 12px; font-weight: 600; color: var(--tinta-suave); padding: 0 6px; }
+.acciones { display: flex; gap: 10px; flex-wrap: wrap; }
