@@ -1,7 +1,9 @@
 package cl.duoc.duocconecta.usuarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.DisplayName;
@@ -70,5 +72,68 @@ class MsUsuariosApplicationTests {
     void healthEsPublico() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * Con un token válido, el perfil se crea solo y la respuesta trae las redes.
+     *
+     * <p>Este test existe por un fallo real: la lista de redes se carga de forma perezosa y el
+     * mapeo a DTO se hacía fuera de la transacción, así que en AWS reventaba con
+     * {@code LazyInitializationException} aunque en local todo compilara. Los tests anteriores no
+     * lo detectaban porque ninguno llegaba a ejecutar una petición autenticada.</p>
+     */
+    @Test
+    @DisplayName("GET /api/v1/usuarios/me con token válido auto-aprovisiona y devuelve las redes")
+    void perfilPropioSeAutoAprovisiona() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/me").with(tokenDe("camila.rojas@duocuc.cl")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correo").value("camila.rojas@duocuc.cl"))
+                .andExpect(jsonPath("$.rol").value("ESTUDIANTE"))
+                .andExpect(jsonPath("$.redes").isArray());
+    }
+
+    /** Llamar dos veces no crea dos perfiles: la segunda encuentra el que ya existe. */
+    @Test
+    @DisplayName("Entrar dos veces devuelve siempre el mismo perfil")
+    void elPerfilNoSeDuplica() throws Exception {
+        var peticion = get("/api/v1/usuarios/me").with(tokenDe("matias.fuentes@duocuc.cl"));
+
+        String primero = mockMvc.perform(peticion).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String segundo = mockMvc.perform(peticion).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(primero).isEqualTo(segundo);
+    }
+
+    /**
+     * Un correo de un dominio que no es de Duoc recibe 403 aunque el token traiga rol.
+     *
+     * <p>Comprueba que la validación de dominio también vive en el servicio y no solo en la
+     * anotación del endpoint: un token manipulado no alcanza para entrar.</p>
+     */
+    @Test
+    @DisplayName("Un dominio no autorizado recibe 403 y no crea perfil")
+    void dominioExternoRecibe403() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/me").with(tokenDe("alguien@gmail.com")))
+                .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Arma un token de prueba con los claims que emite Azure AD.
+     *
+     * <p>La authority se pone a mano porque el postprocesador {@code jwt()} no pasa por
+     * {@code ConversorRolesJwt}. Eso no debilita la prueba: la traducción de dominio a rol ya está
+     * cubierta por {@link ResolvedorRolTest}, y el servicio igual vuelve a validar el dominio del
+     * correo, así que un dominio externo sigue quedando rechazado aunque traiga la authority.</p>
+     */
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor tokenDe(String correo) {
+        return jwt()
+                .jwt(token -> token
+                        .claim("oid", "oid-" + correo)
+                        .claim("email", correo)
+                        .claim("name", correo))
+                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        "ROLE_ESTUDIANTE"));
     }
 }

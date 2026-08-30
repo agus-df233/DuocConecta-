@@ -84,7 +84,7 @@ public class UsuarioController {
     @GetMapping("/me")
     @PreAuthorize(ROLES_DE_LA_PLATAFORMA)
     public ResponseEntity<PerfilPrivadoResponse> obtenerPerfilPropio() {
-        return ResponseEntity.ok(PerfilPrivadoResponse.desde(servicio.obtenerOCrearPerfilPropio()));
+        return ResponseEntity.ok(servicio.obtenerOCrearPerfilPropio());
     }
 
     /**
@@ -112,7 +112,7 @@ public class UsuarioController {
     @PreAuthorize(ROLES_DE_LA_PLATAFORMA)
     public ResponseEntity<PerfilPrivadoResponse> actualizarPerfilPropio(
             @Valid @RequestBody ActualizarPerfilRequest solicitud) {
-        return ResponseEntity.ok(PerfilPrivadoResponse.desde(servicio.actualizarPerfilPropio(solicitud)));
+        return ResponseEntity.ok(servicio.actualizarPerfilPropio(solicitud));
     }
 
     /**
@@ -192,7 +192,7 @@ public class UsuarioController {
     public ResponseEntity<PerfilPublicoResponse> obtenerPerfilPublico(
             @Parameter(description = "Identificador del perfil a consultar")
             @PathVariable UUID id) {
-        return ResponseEntity.ok(PerfilPublicoResponse.desde(servicio.buscarPerfilPublico(id)));
+        return ResponseEntity.ok(servicio.buscarPerfilPublico(id));
     }
 
     /**
@@ -233,9 +233,7 @@ public class UsuarioController {
             @RequestParam(defaultValue = "20") int tamano) {
 
         Pageable paginacion = PageRequest.of(Math.max(pagina, 0), acotarTamano(tamano));
-        Page<PerfilPublicoResponse> resultado = servicio
-                .listarPerfilesVisibles(carrera, sede, paginacion)
-                .map(PerfilPublicoResponse::desde);
+        Page<PerfilPublicoResponse> resultado = servicio.listarPerfilesVisibles(carrera, sede, paginacion);
 
         return ResponseEntity.ok(resultado.getContent());
     }

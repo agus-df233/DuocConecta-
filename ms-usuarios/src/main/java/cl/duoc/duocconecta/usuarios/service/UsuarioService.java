@@ -3,6 +3,8 @@ package cl.duoc.duocconecta.usuarios.service;
 import cl.duoc.duocconecta.comun.seguridad.UsuarioActual;
 import cl.duoc.duocconecta.usuarios.domain.Usuario;
 import cl.duoc.duocconecta.usuarios.dto.ActualizarPerfilRequest;
+import cl.duoc.duocconecta.usuarios.dto.PerfilPrivadoResponse;
+import cl.duoc.duocconecta.usuarios.dto.PerfilPublicoResponse;
 import cl.duoc.duocconecta.usuarios.repository.UsuarioRepository;
 import java.util.List;
 import java.util.UUID;
@@ -12,7 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Lógica de negocio de los perfiles de usuario.
@@ -20,6 +22,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>La identidad siempre se toma del token a través de {@link UsuarioActual}; ningún método
  * recibe el {@code oid} o el correo por parámetro, para que nadie pueda operar sobre el perfil
  * ajeno cambiando un valor de la petición.</p>
+ *
+ * <p>Los métodos públicos devuelven DTOs y no entidades. Es a propósito: la conversión tiene que
+ * ocurrir <strong>dentro</strong> de la transacción, porque la lista de redes se carga de forma
+ * perezosa y fuera de la transacción ya no hay sesión con la base para ir a buscarla.</p>
+ *
+ * <p>Las transacciones se manejan con {@link TransactionTemplate} en vez de con anotaciones porque
+ * el auto-aprovisionamiento necesita reintentar en una transacción <em>nueva</em>, y una anotación
+ * no permite eso cuando el método se llama a sí mismo.</p>
  */
 @Service
 public class UsuarioService {
@@ -28,10 +38,14 @@ public class UsuarioService {
 
     private final UsuarioRepository repositorio;
     private final UsuarioActual usuarioActual;
+    private final TransactionTemplate transaccion;
 
-    public UsuarioService(UsuarioRepository repositorio, UsuarioActual usuarioActual) {
+    public UsuarioService(UsuarioRepository repositorio,
+                          UsuarioActual usuarioActual,
+                          TransactionTemplate transaccion) {
         this.repositorio = repositorio;
         this.usuarioActual = usuarioActual;
+        this.transaccion = transaccion;
     }
 
     /**
@@ -40,32 +54,25 @@ public class UsuarioService {
      * <p>Esto es el auto-aprovisionamiento: no hay registro manual. Si el dominio del correo no
      * está autorizado, {@link UsuarioActual#obtener()} lanza la excepción correspondiente y el
      * perfil no se crea.</p>
-     *
-     * @return el perfil, recién creado o ya existente
      */
-    @Transactional
-    public Usuario obtenerOCrearPerfilPropio() {
-        UsuarioActual.IdentidadUsuario identidad = usuarioActual.obtener();
-
-        return repositorio.findByOidEntra(identidad.oid())
-                .map(existente -> sincronizar(existente, identidad))
-                .orElseGet(() -> crearPerfil(identidad));
+    public PerfilPrivadoResponse obtenerOCrearPerfilPropio() {
+        return sobreMiPerfil(PerfilPrivadoResponse::desde);
     }
 
     /**
      * Actualiza el perfil del usuario autenticado.
      */
-    @Transactional
-    public Usuario actualizarPerfilPropio(ActualizarPerfilRequest solicitud) {
-        Usuario usuario = obtenerOCrearPerfilPropio();
-        usuario.actualizarPerfil(
-                solicitud.nombre(),
-                solicitud.carrera(),
-                solicitud.sede(),
-                solicitud.bio(),
-                solicitud.telefono(),
-                solicitud.redes());
-        return usuario;
+    public PerfilPrivadoResponse actualizarPerfilPropio(ActualizarPerfilRequest solicitud) {
+        return sobreMiPerfil(usuario -> {
+            usuario.actualizarPerfil(
+                    solicitud.nombre(),
+                    solicitud.carrera(),
+                    solicitud.sede(),
+                    solicitud.bio(),
+                    solicitud.telefono(),
+                    solicitud.redes());
+            return PerfilPrivadoResponse.desde(usuario);
+        });
     }
 
     /**
@@ -73,9 +80,8 @@ public class UsuarioService {
      *
      * @return el nuevo valor de visibilidad
      */
-    @Transactional
     public boolean alternarVisibilidadPropia() {
-        return obtenerOCrearPerfilPropio().alternarVisibilidad();
+        return sobreMiPerfil(Usuario::alternarVisibilidad);
     }
 
     /**
@@ -83,59 +89,82 @@ public class UsuarioService {
      *
      * <p>Solo las propias: las de terceros quedan sujetas al consentimiento mutuo (EP2).</p>
      */
-    @Transactional
     public List<String> obtenerRedesPropias() {
-        return List.copyOf(obtenerOCrearPerfilPropio().getRedes());
+        return sobreMiPerfil(usuario -> List.copyOf(usuario.getRedes()));
     }
 
     /**
      * Busca el perfil público de otra persona.
      *
-     * @param id identificador del perfil
-     * @return el perfil, si existe y está visible
      * @throws UsuarioNoEncontradoException si no existe o está oculto
      */
-    @Transactional(readOnly = true)
-    public Usuario buscarPerfilPublico(UUID id) {
-        return repositorio.findByIdAndVisibleIsTrue(id)
-                .orElseThrow(() -> new UsuarioNoEncontradoException(id));
+    public PerfilPublicoResponse buscarPerfilPublico(UUID id) {
+        return transaccion.execute(estado -> repositorio.findByIdAndVisibleIsTrue(id)
+                .map(PerfilPublicoResponse::desde)
+                .orElseThrow(() -> new UsuarioNoEncontradoException(id)));
     }
 
     /**
      * Lista los perfiles visibles, con filtros opcionales por carrera y sede.
-     *
-     * <p>Los filtros vacíos se normalizan a nulo para que la consulta los ignore.</p>
      */
-    @Transactional(readOnly = true)
-    public Page<Usuario> listarPerfilesVisibles(String carrera, String sede, Pageable paginacion) {
-        return repositorio.buscarVisibles(vacioComoNulo(carrera), vacioComoNulo(sede), paginacion);
+    public Page<PerfilPublicoResponse> listarPerfilesVisibles(String carrera, String sede,
+                                                              Pageable paginacion) {
+        return transaccion.execute(estado -> repositorio
+                .buscarVisibles(vacioComoNulo(carrera), vacioComoNulo(sede), paginacion)
+                .map(PerfilPublicoResponse::desde));
+    }
+
+    /**
+     * Busca el perfil por su identificador de Azure AD y lo crea si no existe.
+     *
+     * <p>Se llama siempre desde dentro de una transacción abierta por quien invoca.</p>
+     */
+    private Usuario obtenerOCrear(UsuarioActual.IdentidadUsuario identidad) {
+        return repositorio.findByOidEntra(identidad.oid())
+                .map(existente -> sincronizar(existente, identidad))
+                .orElseGet(() -> crearPerfil(identidad));
     }
 
     /**
      * Crea el perfil por primera vez.
      *
-     * <p>Dos peticiones simultáneas del mismo login podrían intentar crear el perfil a la vez y
-     * chocar contra el índice único de {@code oid_entra}. En ese caso se vuelve a buscar: la otra
-     * transacción ya lo creó.</p>
+     * <p>Dos peticiones simultáneas del mismo login pueden intentar crearlo a la vez y chocar
+     * contra el índice único de {@code oid_entra}. Cuando eso pasa, PostgreSQL deja la transacción
+     * en curso abortada y ya no acepta más consultas en ella, así que la segunda búsqueda se hace
+     * en una transacción nueva.</p>
      */
     private Usuario crearPerfil(UsuarioActual.IdentidadUsuario identidad) {
         Usuario nuevo = new Usuario(
                 identidad.oid(), identidad.nombre(), identidad.correo(), identidad.rol());
+        // Se usa saveAndFlush para que el choque contra el índice único salte acá y no
+        // más tarde, cuando ya no se sabría qué operación lo provocó.
+        Usuario guardado = repositorio.saveAndFlush(nuevo);
+        log.info("Perfil auto-aprovisionado para el rol {} en el dominio {}.",
+                identidad.rol(), dominioDe(identidad.correo()));
+        return guardado;
+    }
+
+    /**
+     * Ejecuta una operación sobre el perfil del usuario autenticado, dentro de una transacción,
+     * creando el perfil si es su primer ingreso.
+     *
+     * <p>Si dos peticiones simultáneas del mismo usuario intentan crearlo a la vez, una choca
+     * contra el índice único. PostgreSQL deja esa transacción abortada y no acepta más consultas
+     * en ella, así que el reintento se hace en una transacción nueva: para entonces el perfil ya
+     * existe y la segunda vuelta simplemente lo encuentra.</p>
+     */
+    private <T> T sobreMiPerfil(java.util.function.Function<Usuario, T> accion) {
+        UsuarioActual.IdentidadUsuario identidad = usuarioActual.obtener();
         try {
-            Usuario guardado = repositorio.saveAndFlush(nuevo);
-            log.info("Perfil auto-aprovisionado para el rol {} en el dominio {}.",
-                    identidad.rol(), dominioDe(identidad.correo()));
-            return guardado;
+            return transaccion.execute(estado -> accion.apply(obtenerOCrear(identidad)));
         } catch (DataIntegrityViolationException creacionSimultanea) {
-            log.debug("El perfil ya había sido creado por otra petición simultánea; se reutiliza.");
-            return repositorio.findByOidEntra(identidad.oid())
-                    .orElseThrow(() -> creacionSimultanea);
+            log.debug("El perfil lo creó otra petición simultánea; se reintenta.");
+            return transaccion.execute(estado -> accion.apply(obtenerOCrear(identidad)));
         }
     }
 
     /**
-     * Refresca los datos que vienen del token, por si cambiaron en Azure AD desde el último acceso
-     * (por ejemplo, una corrección del nombre o un cambio de rol).
+     * Refresca los datos que vienen del token, por si cambiaron en Azure AD desde el último acceso.
      */
     private Usuario sincronizar(Usuario existente, UsuarioActual.IdentidadUsuario identidad) {
         existente.sincronizarDesdeToken(identidad.nombre(), identidad.correo(), identidad.rol());
@@ -147,7 +176,7 @@ public class UsuarioService {
         return (valor == null || valor.isBlank()) ? null : valor.trim();
     }
 
-    /** Saca el dominio del correo para poder registrarlo en el log sin exponer el correo entero. */
+    /** Saca el dominio del correo para registrarlo en el log sin exponer el correo entero. */
     private static String dominioDe(String correo) {
         int posicionArroba = correo.lastIndexOf('@');
         return posicionArroba >= 0 ? correo.substring(posicionArroba + 1) : "desconocido";

@@ -283,6 +283,9 @@ cmd_desplegar() {
     lb_args+=("targetGroupArn=$tg,containerName=$s,containerPort=$(puerto_de "$s")")
   done
 
+  # El período de gracia es imprescindible: el ALB empieza a chequear salud apenas registra la
+  # tarea, pero Spring Boot tarda cerca de un minuto en levantar. Sin gracia, ECS mata la tarea
+  # por "unhealthy" antes de que llegue a responder y el despliegue queda en un ciclo infinito.
   if aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICIO_ECS" \
        --query 'services[0].status' --output text 2>/dev/null | grep -q ACTIVE; then
     aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" \
@@ -292,6 +295,7 @@ cmd_desplegar() {
     aws ecs create-service --cluster "$CLUSTER" --service-name "$SERVICIO_ECS" \
       --task-definition "$rev" --desired-count 1 --launch-type FARGATE \
       --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG_TAREAS],assignPublicIp=ENABLED}" \
+      --health-check-grace-period-seconds 240 \
       --load-balancers "${lb_args[@]}" >/dev/null
     ok "servicio creado"
   fi
