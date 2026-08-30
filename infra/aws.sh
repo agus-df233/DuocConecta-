@@ -306,6 +306,17 @@ cmd_desplegar() {
 # iniciar / apagar — control de costo entre jornadas.
 # ---------------------------------------------------------------------------
 cmd_iniciar() {
+  # La base va primero: si las tareas arrancan antes, no encuentran a dónde conectarse.
+  local estado
+  estado=$(aws rds describe-db-instances --db-instance-identifier "$PROYECTO-db" \
+    --query 'DBInstances[0].DBInstanceStatus' --output text 2>/dev/null)
+  if [[ "$estado" == "stopped" ]]; then
+    aws rds start-db-instance --db-instance-identifier "$PROYECTO-db" >/dev/null
+    azul "Encendiendo la base (tarda ~5 min)..."
+    aws rds wait db-instance-available --db-instance-identifier "$PROYECTO-db"
+  fi
+  ok "base disponible"
+
   aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" --desired-count 1 >/dev/null
   azul "Levantando la tarea (tarda ~2 min en pasar el health check)..."
   aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICIO_ECS" && ok "tarea estable"
@@ -314,7 +325,16 @@ cmd_iniciar() {
 
 cmd_apagar() {
   aws ecs update-service --cluster "$CLUSTER" --service "$SERVICIO_ECS" --desired-count 0 >/dev/null
-  ok "Tareas en cero. El ALB y RDS siguen cobrando: borralos si no vas a trabajar por varios días."
+  ok "tareas de Fargate en cero"
+
+  # Detener la base conserva los datos y el endpoint; solo se sigue pagando el disco.
+  # Ojo: AWS la vuelve a encender sola a los 7 días.
+  aws rds stop-db-instance --db-instance-identifier "$PROYECTO-db" >/dev/null 2>&1 \
+    && ok "base detenida (los datos se conservan)" \
+    || aviso "la base ya estaba detenida o está cambiando de estado"
+
+  aviso "El ALB sigue cobrando (~\$0,55 por día). Se borra con:"
+  echo "      aws elbv2 delete-load-balancer --load-balancer-arn \$ALB_ARN"
 }
 
 cmd_urls() {
