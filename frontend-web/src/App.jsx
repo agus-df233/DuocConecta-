@@ -1,7 +1,7 @@
 // Estructura de la aplicación: pantalla de login si no hay sesión, o la app con sus
 // dos vistas (Perfil y Vitrina) si el usuario ya entró.
-import { useState } from 'react'
-import { cuentaActual, iniciarSesion, cerrarSesion } from './auth'
+import { useEffect, useState } from 'react'
+import { cuentaActual, iniciarSesion, cerrarSesion, obtenerToken } from './auth'
 import Perfil from './Perfil'
 import Vitrina from './Vitrina'
 
@@ -25,6 +25,9 @@ export default function App() {
           <button className={vista === 'perfil' ? 'activo' : ''} onClick={() => setVista('perfil')}>
             Mi perfil
           </button>
+          <button className={vista === 'token' ? 'activo' : ''} onClick={() => setVista('token')}>
+            Diagnóstico
+          </button>
         </nav>
         <div className="sesion">
           <span>{cuenta.username}</span>
@@ -32,7 +35,11 @@ export default function App() {
         </div>
       </header>
 
-      <main>{vista === 'perfil' ? <Perfil /> : <Vitrina />}</main>
+      <main>
+        {vista === 'perfil' && <Perfil />}
+        {vista === 'token' && <Diagnostico />}
+        {vista === 'vitrina' && <Vitrina />}
+      </main>
     </div>
   )
 }
@@ -60,5 +67,55 @@ function Login() {
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Muestra el contenido del token que devuelve Azure AD.
+ *
+ * Sirve para comprobar de un vistazo que el login trae lo que el backend necesita: la audiencia
+ * correcta, el identificador del usuario y sobre todo el correo institucional, del que se deduce
+ * el rol. Si el correo no llega, el backend responde 403 y sin esta pantalla no se sabe por qué.
+ */
+function Diagnostico() {
+  const [claims, setClaims] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    obtenerToken()
+      .then((token) => {
+        // El JWT son tres partes separadas por punto; la del medio son los datos, en base64url.
+        const cuerpo = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+        setClaims(JSON.parse(decodeURIComponent(escape(atob(cuerpo)))))
+      })
+      .catch((e) => setError(e.message))
+  }, [])
+
+  if (error) return <div className="error">{error}</div>
+  if (!claims) return <div className="cargando">Pidiendo el token…</div>
+
+  const importantes = ['aud', 'iss', 'oid', 'email', 'preferred_username', 'upn', 'roles', 'scp']
+
+  return (
+    <section className="tarjeta">
+      <h2>Diagnóstico del token</h2>
+      <p className="ayuda">Lo que Azure AD le entrega al backend en cada petición.</p>
+
+      <table className="claims">
+        <tbody>
+          {importantes.map((c) => (
+            <tr key={c}>
+              <th>{c}</th>
+              <td>{claims[c] ? JSON.stringify(claims[c]) : <em>no viene</em>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <details>
+        <summary>Ver el token completo</summary>
+        <pre>{JSON.stringify(claims, null, 2)}</pre>
+      </details>
+    </section>
   )
 }

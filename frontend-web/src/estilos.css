@@ -96,3 +96,18 @@ input:focus, textarea:focus { outline: 2px solid var(--azul-claro); outline-offs
 fieldset { border: 1px solid var(--borde); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
 legend { font-size: 12px; font-weight: 600; color: var(--tinta-suave); padding: 0 6px; }
 .acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Tabla de la vista de diagnóstico del token. */
+.claims { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+.claims th {
+  text-align: left; padding: 7px 10px; width: 180px;
+  font-family: ui-monospace, Menlo, monospace; color: var(--azul-claro);
+  border-bottom: 1px solid var(--borde); vertical-align: top;
+}
+.claims td { padding: 7px 10px; border-bottom: 1px solid var(--borde); word-break: break-all; }
+.claims em { color: var(--tinta-suave); }
+details pre {
+  background: var(--azul); color: #DDE6F3; padding: 12px; border-radius: 8px;
+  font-size: 12px; overflow-x: auto;
+}
+summary { cursor: pointer; font-size: 13px; color: var(--tinta-suave); }

@@ -25,11 +25,26 @@ FAMILIA="$PROYECTO"
 SERVICIOS=(ms-usuarios bff-web ms-proyectos)
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Los puertos de cada servicio. El ALB enruta por path a cada uno de estos.
-declare -A PUERTOS=( [ms-usuarios]=8081 [bff-web]=8080 [ms-proyectos]=8082 )
-declare -A RUTAS=( [ms-usuarios]="/api/v1/usuarios*" [bff-web]="/api/v1/bff*" [ms-proyectos]="/api/v1/proyectos*" )
+# Puerto y ruta de cada servicio. Se resuelven con funciones y no con arreglos asociativos
+# porque macOS trae bash 3.2, que no los soporta: en esa versión el script ni siquiera arranca.
+puerto_de() {
+  case "$1" in
+    bff-web)      echo 8080 ;;
+    ms-usuarios)  echo 8081 ;;
+    ms-proyectos) echo 8082 ;;
+  esac
+}
 
-azul()  { printf '\033[1;34m%s\033[0m\n' "$*"; }
+# Path por el que el ALB enruta hacia cada servicio.
+ruta_de() {
+  case "$1" in
+    bff-web)      echo "/api/v1/bff*" ;;
+    ms-usuarios)  echo "/api/v1/usuarios*" ;;
+    ms-proyectos) echo "/api/v1/proyectos*" ;;
+  esac
+}
+
+azul()  { printf '\033[1;34m%b\033[0m\n' "$*"; }
 ok()    { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 falla() { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 aviso() { printf '  \033[33m!\033[0m %s\n' "$*"; }
@@ -87,7 +102,10 @@ cmd_crear() {
 
   azul "2/6 · Cluster de ECS y grupo de logs"
   aws ecs describe-clusters --clusters "$CLUSTER" --query 'clusters[0].status' --output text 2>/dev/null | grep -q ACTIVE \
-    || aws ecs create-cluster --cluster-name "$CLUSTER" --capacity-providers FARGATE >/dev/null
+    || aws ecs create-cluster --cluster-name "$CLUSTER" >/dev/null
+  # Sin --capacity-providers a propósito: ese flag exige permisos sobre el service-linked role
+  # que el Learner Lab no concede. Fargate funciona igual porque el servicio se crea
+  # más abajo con --launch-type FARGATE.
   aws logs create-log-group --log-group-name "/ecs/$PROYECTO" 2>/dev/null || true
   ok "cluster $CLUSTER"
 
@@ -111,11 +129,11 @@ cmd_crear() {
   sg_rds=$(crear_sg "$PROYECTO-rds" "PostgreSQL; solo acepta trafico de las tareas")
 
   # El ALB acepta HTTP de cualquiera; las tareas solo del ALB; la base solo de las tareas.
-  aws ec2 authorize-security-group-ingress --group-id "$sg_alb" --protocol tcp --port 80 --cidr 0.0.0.0/0 2>/dev/null || true
+  aws ec2 authorize-security-group-ingress --group-id "$sg_alb" --protocol tcp --port 80 --cidr 0.0.0.0/0 >/dev/null 2>&1 || true
   for p in 8080 8081 8082; do
-    aws ec2 authorize-security-group-ingress --group-id "$sg_tareas" --protocol tcp --port "$p" --source-group "$sg_alb" 2>/dev/null || true
+    aws ec2 authorize-security-group-ingress --group-id "$sg_tareas" --protocol tcp --port "$p" --source-group "$sg_alb" >/dev/null 2>&1 || true
   done
-  aws ec2 authorize-security-group-ingress --group-id "$sg_rds" --protocol tcp --port 5432 --source-group "$sg_tareas" 2>/dev/null || true
+  aws ec2 authorize-security-group-ingress --group-id "$sg_rds" --protocol tcp --port 5432 --source-group "$sg_tareas" >/dev/null 2>&1 || true
   ok "SGs: alb=$sg_alb tareas=$sg_tareas rds=$sg_rds"
 
   azul "4/6 · Base de datos RDS"
@@ -123,7 +141,7 @@ cmd_crear() {
   if ! aws rds describe-db-instances --db-instance-identifier "$PROYECTO-db" >/dev/null 2>&1; then
     aws rds create-db-instance \
       --db-instance-identifier "$PROYECTO-db" \
-      --db-name duocconecta --engine postgres --engine-version 16.4 \
+      --db-name duocconecta --engine postgres --engine-version 16.15 \
       --db-instance-class db.t3.micro --allocated-storage 20 \
       --master-username duocconecta --manage-master-user-password \
       --vpc-security-group-ids "$sg_rds" \
@@ -147,12 +165,12 @@ cmd_crear() {
     local tg
     tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
     if [[ -z "$tg" || "$tg" == "None" ]]; then
-      tg=$(aws elbv2 create-target-group --name "$PROYECTO-$s" --protocol HTTP --port "${PUERTOS[$s]}" \
+      tg=$(aws elbv2 create-target-group --name "$PROYECTO-$s" --protocol HTTP --port "$(puerto_de "$s")" \
         --vpc-id "$vpc" --target-type ip --health-check-path /actuator/health \
         --health-check-interval-seconds 30 --healthy-threshold-count 2 \
         --query 'TargetGroups[0].TargetGroupArn' --output text)
     fi
-    ok "target group $PROYECTO-$s → :${PUERTOS[$s]}"
+    ok "target group $PROYECTO-$s → :$(puerto_de "$s")"
   done
 
   # El listener manda por defecto al BFF, que es lo único que el frontend conoce.
@@ -165,7 +183,7 @@ cmd_crear() {
   for s in ms-usuarios ms-proyectos; do
     local tg; tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text)
     aws elbv2 create-rule --listener-arn "$listener_arn" --priority "$prioridad" \
-      --conditions "Field=path-pattern,Values=${RUTAS[$s]}" \
+      --conditions "Field=path-pattern,Values=$(ruta_de "$s")" \
       --actions "Type=forward,TargetGroupArn=$tg" >/dev/null 2>&1 || true
     prioridad=$((prioridad + 10))
   done
@@ -203,10 +221,12 @@ cmd_build() {
   local reg; reg=$(registro)
 
   aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$reg" >/dev/null
-  # --platform amd64 es obligatorio: Fargate corre x86 y esta Mac es ARM.
-  docker build --platform linux/amd64 -f "$RAIZ/docker/Dockerfile" --build-arg "SERVICIO=$s" \
+  # Se usa buildx y no 'docker build' porque hace falta fijar la arquitectura: Fargate corre
+  # x86_64 y los Mac con chip M son ARM. Sin esto la imagen no arranca en la nube.
+  # buildx construye y sube en un solo paso.
+  docker buildx build --platform linux/amd64 --push \
+    -f "$RAIZ/docker/Dockerfile" --build-arg "SERVICIO=$s" \
     -t "$reg/$PROYECTO/$s:latest" "$RAIZ"
-  docker push "$reg/$PROYECTO/$s:latest"
   ok "$s publicado en ECR"
 }
 
@@ -253,7 +273,7 @@ cmd_desplegar() {
     local tg; tg=$(aws elbv2 describe-target-groups --names "$PROYECTO-$s" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
     [[ -z "$tg" || "$tg" == "None" ]] && continue
     [[ "$s" == "ms-proyectos" && ! -d "$RAIZ/ms-proyectos" ]] && continue
-    lb_args+=("targetGroupArn=$tg,containerName=$s,containerPort=${PUERTOS[$s]}")
+    lb_args+=("targetGroupArn=$tg,containerName=$s,containerPort=$(puerto_de "$s")")
   done
 
   if aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICIO_ECS" \
