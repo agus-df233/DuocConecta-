@@ -65,7 +65,6 @@ public class UsuarioService {
     public PerfilPrivadoResponse actualizarPerfilPropio(ActualizarPerfilRequest solicitud) {
         return sobreMiPerfil(usuario -> {
             usuario.actualizarPerfil(
-                    solicitud.nombre(),
                     solicitud.carrera(),
                     solicitud.sede(),
                     solicitud.bio(),

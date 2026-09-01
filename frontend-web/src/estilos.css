@@ -111,3 +111,10 @@ details pre {
   font-size: 12px; overflow-x: auto;
 }
 summary { cursor: pointer; font-size: 13px; color: var(--tinta-suave); }
+
+/* Dato que viene del inicio de sesión y no se edita: se muestra distinto de un campo
+   editable para que quede claro por qué no se puede tocar. */
+.dato-fijo{background:var(--fondo);border:1px solid var(--borde);border-radius:8px;padding:9px 12px}
+.dato-fijo span{display:block;font-size:13px;font-weight:600;color:var(--tinta-suave);margin-bottom:2px}
+.dato-fijo strong{display:block;font-size:15px}
+.dato-fijo em{display:block;font-size:12px;color:var(--tinta-suave);font-style:normal;margin-top:3px}

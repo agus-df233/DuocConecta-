@@ -173,7 +173,7 @@ TOKEN=$TOKEN_DUOCUC
 # Completar el perfil
 curl -s -X PUT localhost:8081/api/v1/usuarios/me \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"nombre":"Juana Pérez","carrera":"Ingeniería en Informática","sede":"Plaza Oeste",
+  -d '{"carrera":"Ingeniería en Informática","sede":"Plaza Oeste",
        "bio":"Backend y bases de datos.","telefono":"+56 9 1234 5678",
        "redes":["https://github.com/juanaperez"]}'
 
@@ -214,7 +214,7 @@ mapeo de dominio a rol distinga `@profesor.duoc.cl` de `@duoc.cl`.
 | Método y ruta | Qué hace | Requiere |
 |---|---|---|
 | `GET /me` | Auto-provisiona o lee el perfil propio desde los claims del token | Rol válido |
-| `PUT /me` | Actualiza nombre, carrera, sede, bio, teléfono y redes | Rol válido |
+| `PUT /me` | Completa carrera, sede, bio, teléfono y redes. El nombre viene del token | Rol válido |
 | `PATCH /me/visibilidad` | Muestra u oculta el perfil en las búsquedas | Rol válido |
 | `GET /me/redes` | Devuelve las redes sociales del usuario autenticado | Rol válido |
 | `GET /{id}` | Perfil público de otra persona (sin teléfono ni redes) | Token válido |

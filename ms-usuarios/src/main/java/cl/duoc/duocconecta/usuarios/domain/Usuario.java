@@ -140,14 +140,13 @@ public class Usuario {
     /**
      * Aplica los cambios del perfil que la persona puede editar.
      *
-     * <p>Se dejan afuera a propósito el correo, el rol y el {@code oidEntra}: esos vienen del
-     * token y no se pueden cambiar desde la API.</p>
+     * <p>Se dejan afuera a propósito el nombre, el correo, el rol y el {@code oidEntra}: vienen del
+     * token y no se cambian desde la API. El nombre en particular se resincroniza en cada ingreso
+     * con {@link #sincronizarDesdeToken}, así que si se pudiera editar acá, el valor escrito a mano
+     * se perdería la próxima vez que la persona entrara.</p>
      */
-    public void actualizarPerfil(String nombre, String carrera, String sede, String bio,
+    public void actualizarPerfil(String carrera, String sede, String bio,
                                  String telefono, List<String> redes) {
-        if (nombre != null && !nombre.isBlank()) {
-            this.nombre = nombre.trim();
-        }
         this.carrera = normalizar(carrera);
         this.sede = normalizar(sede);
         this.bio = normalizar(bio);

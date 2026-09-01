@@ -90,8 +90,9 @@ public class UsuarioController {
     /**
      * Actualiza los datos editables del perfil propio.
      *
-     * <p>Solo se pueden cambiar nombre, carrera, sede, biografía, teléfono y redes. El correo, el
-     * rol y el identificador de Azure AD vienen del token y no son modificables.</p>
+     * <p>Solo se pueden cambiar carrera, sede, biografía, teléfono y redes: son los datos que el
+     * login no puede aprovisionar solo. El nombre, el correo, el rol y el identificador de Azure AD
+     * vienen del token y no son modificables.</p>
      *
      * @param solicitud campos nuevos del perfil, ya validados
      * @return 200 con el perfil actualizado
@@ -99,9 +100,11 @@ public class UsuarioController {
     @Operation(
             summary = "Actualiza el perfil propio",
             description = """
-                    Modifica nombre, carrera, sede, biografía, teléfono y redes sociales de la
-                    persona autenticada. El correo, el rol y el identificador de Azure AD no se
-                    pueden cambiar porque se toman del token. Devuelve el perfil ya actualizado.""")
+                    Modifica carrera, sede, biografía, teléfono y redes sociales de la persona
+                    autenticada: es donde completa lo que el login no pudo traer. El nombre, el
+                    correo, el rol y el identificador de Azure AD no se pueden cambiar porque vienen
+                    del token; el nombre además se resincroniza en cada ingreso. Devuelve el perfil
+                    ya actualizado.""")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Perfil actualizado"),
             @ApiResponse(responseCode = "400", description = "Los datos enviados no pasaron la validación", content = @io.swagger.v3.oas.annotations.media.Content),

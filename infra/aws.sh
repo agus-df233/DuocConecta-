@@ -8,6 +8,7 @@
 #   ./infra/aws.sh crear       Crea ECR, cluster, security groups, RDS, ALB y API Gateway. Idempotente.
 #   ./infra/aws.sh build       Compila la imagen de un servicio y la sube a ECR.
 #   ./infra/aws.sh desplegar   Registra la task definition y actualiza el servicio de ECS.
+#   ./infra/aws.sh front       Construye el frontend y lo publica en S3, detrás del API Gateway.
 #   ./infra/aws.sh iniciar     Levanta la tarea, espera el health y muestra las URLs.
 #   ./infra/aws.sh apagar      Baja la tarea a cero. IMPORTANTE: correrlo al terminar de trabajar.
 #   ./infra/aws.sh urls        Muestra las URLs del ALB y del API Gateway.
@@ -303,6 +304,97 @@ cmd_desplegar() {
 }
 
 # ---------------------------------------------------------------------------
+# front — publica el frontend en S3 y lo deja accesible por HTTPS.
+#
+# Por qué pasa por el API Gateway y no se sirve S3 directo: Azure AD exige HTTPS en los URI de
+# redirección (solo perdona localhost), el sitio estático de S3 es HTTP puro, y CloudFront no está
+# habilitado en el laboratorio. El API Gateway resuelve las tres cosas de una vez: da HTTPS, deja
+# el front y la API bajo la misma dirección —así el navegador ni siquiera aplica CORS— y le da al
+# equipo una sola URL.
+# ---------------------------------------------------------------------------
+cmd_front() {
+  source "$RAIZ/infra/.recursos" 2>/dev/null || { falla "Falta correr 'aws.sh crear' primero"; exit 1; }
+  # Sin estos valores el front se compila igual pero el login falla, y el error recién
+  # aparece en el navegador. Mejor fallar acá.
+  [[ -z "${VITE_AZURE_CLIENT_ID:-}" || -z "${VITE_AZURE_SCOPE:-}" || -z "${AZURE_TENANT_ID:-}" ]] && {
+    falla "Faltan VITE_AZURE_CLIENT_ID, VITE_AZURE_SCOPE o AZURE_TENANT_ID en .env"
+    exit 1
+  }
+
+  local bucket="$PROYECTO-web-$(cuenta)"
+
+  azul "1/4 · Bucket de S3"
+  if ! aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then
+    aws s3api create-bucket --bucket "$bucket" >/dev/null
+  fi
+  # El sitio necesita lectura pública. El contenido es el frontend compilado: no hay nada
+  # sensible ahí, los identificadores de Azure son públicos por diseño del flujo.
+  aws s3api delete-public-access-block --bucket "$bucket" >/dev/null 2>&1 || true
+  aws s3api put-bucket-policy --bucket "$bucket" --policy "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [{
+      \"Effect\": \"Allow\", \"Principal\": \"*\",
+      \"Action\": \"s3:GetObject\",
+      \"Resource\": \"arn:aws:s3:::$bucket/*\"
+    }]
+  }" >/dev/null 2>&1 || { falla "El laboratorio no permite buckets públicos"; exit 1; }
+  # index.html también como página de error: la aplicación es de una sola página.
+  aws s3 website "s3://$bucket" --index-document index.html --error-document index.html
+  ok "$bucket"
+
+  azul "2/4 · Construyendo el frontend"
+  # VITE_BFF_URL vacío = llamadas relativas al mismo origen, que es el API Gateway.
+  ( cd "$RAIZ/frontend-web" && npm install --silent --no-audit --no-fund \
+    && VITE_AZURE_CLIENT_ID="${VITE_AZURE_CLIENT_ID:-}" \
+       VITE_AZURE_TENANT_ID="${AZURE_TENANT_ID:-}" \
+       VITE_AZURE_SCOPE="${VITE_AZURE_SCOPE:-}" \
+       VITE_BFF_URL="" npm run build --silent )
+  ok "compilado"
+
+  azul "3/4 · Subiendo a S3"
+  aws s3 sync "$RAIZ/frontend-web/dist" "s3://$bucket" --delete --only-show-errors
+  ok "subido"
+
+  azul "4/4 · Rutas del API Gateway"
+  local sitio="http://$bucket.s3-website-$REGION.amazonaws.com"
+  local dns; dns=$(aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN" \
+    --query 'LoadBalancers[0].DNSName' --output text)
+
+  # La API va al balanceador; todo lo demás, al sitio estático.
+  ruta() { # $1 = clave de ruta, $2 = destino
+    local integ id
+    # Se reutiliza la integración si ya existe una con ese destino: si no, cada corrida
+    # del script dejaría integraciones huérfanas acumulándose.
+    integ=$(aws apigatewayv2 get-integrations --api-id "$API_ID" \
+      --query "Items[?IntegrationUri=='$2'].IntegrationId | [0]" --output text)
+    if [[ -z "$integ" || "$integ" == "None" ]]; then
+      integ=$(aws apigatewayv2 create-integration --api-id "$API_ID" \
+        --integration-type HTTP_PROXY --integration-method ANY \
+        --integration-uri "$2" --payload-format-version 1.0 \
+        --query IntegrationId --output text)
+    fi
+    id=$(aws apigatewayv2 get-routes --api-id "$API_ID" \
+      --query "Items[?RouteKey=='$1'].RouteId | [0]" --output text)
+    if [[ -n "$id" && "$id" != "None" ]]; then
+      aws apigatewayv2 update-route --api-id "$API_ID" --route-id "$id" --target "integrations/$integ" >/dev/null
+    else
+      aws apigatewayv2 create-route --api-id "$API_ID" --route-key "$1" --target "integrations/$integ" >/dev/null
+    fi
+  }
+  # Las rutas con {proxy+} pasan el resto del camino a la integración con {proxy}.
+  # La ruta por defecto no tiene esa variable: ahí el API Gateway agrega el camino solo,
+  # así que su destino va sin sufijo.
+  ruta 'ANY /api/{proxy+}'      "http://$dns/api/{proxy}"
+  ruta 'ANY /actuator/{proxy+}' "http://$dns/actuator/{proxy}"
+  ruta '$default'               "$sitio"
+  ok "API Gateway enrutando front y API"
+
+  grep -q '^SITIO_WEB=' "$RAIZ/infra/.recursos" 2>/dev/null \
+    || echo "SITIO_WEB=$sitio" >> "$RAIZ/infra/.recursos"
+  cmd_urls
+}
+
+# ---------------------------------------------------------------------------
 # iniciar / apagar — control de costo entre jornadas.
 # ---------------------------------------------------------------------------
 cmd_iniciar() {
@@ -340,6 +432,7 @@ cmd_apagar() {
 cmd_urls() {
   source "$RAIZ/infra/.recursos" 2>/dev/null || return 0
   azul "\nURLs"
+  echo "  Aplicación:      https://$API_ID.execute-api.$REGION.amazonaws.com   ← esta es la que se comparte"
   echo "  ALB (directo):   http://$ALB_DNS"
   echo "  API Gateway:     https://$API_ID.execute-api.$REGION.amazonaws.com"
   echo "  Health:          http://$ALB_DNS/actuator/health"
@@ -350,6 +443,7 @@ case "${1:-}" in
   crear)     cmd_crear ;;
   build)     cmd_build "${2:-}" ;;
   desplegar) cmd_desplegar ;;
+  front)     cmd_front ;;
   iniciar)   cmd_iniciar ;;
   apagar)    cmd_apagar ;;
   urls)      cmd_urls ;;

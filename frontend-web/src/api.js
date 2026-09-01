@@ -5,7 +5,11 @@
 
 import { obtenerToken } from './auth'
 
-const BASE = import.meta.env.VITE_BFF_URL
+// Vacío significa "mismo origen". Es lo que se usa cuando el front va desplegado detrás del
+// API Gateway, que sirve la aplicación y la API bajo la misma dirección: ahí las llamadas son
+// relativas y el navegador ni siquiera aplica CORS. En local sí lleva la URL completa del BFF,
+// porque el front corre en el puerto 5173 y el BFF en el 8080.
+const BASE = import.meta.env.VITE_BFF_URL ?? ''
 
 /** Hace una petición al BFF adjuntando el token y traduciendo los errores a algo legible. */
 async function pedir(ruta, opciones = {}) {

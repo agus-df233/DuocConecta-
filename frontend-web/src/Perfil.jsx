@@ -27,7 +27,6 @@ export default function Perfil() {
     const f = new FormData(evento.target)
     try {
       await guardarMiPerfil({
-        nombre: f.get('nombre'),
         carrera: f.get('carrera'),
         sede: f.get('sede'),
         bio: f.get('bio'),
@@ -47,6 +46,10 @@ export default function Perfil() {
     <section className="tarjeta">
       <h2>Mi perfil</h2>
       <p className="ayuda">
+        Acá completás lo que el inicio de sesión no puede traer solo. Tu nombre, correo y rol
+        vienen de tu cuenta institucional.
+      </p>
+      <p className="ayuda">
         <strong>{perfil.correo}</strong> · rol <strong>{perfil.rol}</strong> ·{' '}
         {perfil.visible ? 'visible en las búsquedas' : 'oculto de las búsquedas'}
       </p>
@@ -59,7 +62,12 @@ export default function Perfil() {
       )}
 
       <form onSubmit={enviar}>
-        <label>Nombre<input name="nombre" defaultValue={perfil.nombre} required /></label>
+        <div className="dato-fijo">
+          <span>Nombre</span>
+          <strong>{perfil.nombre}</strong>
+          <em>Lo administra Duoc y llega con tu inicio de sesión, así que no se edita acá.</em>
+        </div>
+
         <label>Carrera<input name="carrera" defaultValue={perfil.carrera ?? ''} /></label>
         <label>Sede<input name="sede" defaultValue={perfil.sede ?? ''} /></label>
         <label>Biografía<textarea name="bio" rows="3" defaultValue={perfil.bio ?? ''} /></label>

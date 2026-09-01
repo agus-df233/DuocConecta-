@@ -1,7 +1,6 @@
 package cl.duoc.duocconecta.usuarios.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -9,10 +8,11 @@ import java.util.List;
 /**
  * Datos que la persona puede modificar de su propio perfil.
  *
- * <p>El correo, el rol y el identificador de Azure AD no están acá a propósito: vienen del token
- * y no se pueden cambiar desde la API.</p>
+ * <p>Son exactamente los datos que el login NO puede aprovisionar solo. El nombre, el correo, el
+ * rol y el identificador de Azure AD no están acá a propósito: vienen del token, y el nombre además
+ * se resincroniza en cada ingreso, así que dejarlo editable haría que el valor escrito a mano se
+ * perdiera en el siguiente login.</p>
  *
- * @param nombre   nombre para mostrar; es lo único obligatorio
  * @param carrera  carrera a la que pertenece
  * @param sede     sede en la que estudia o trabaja
  * @param bio      presentación breve para la vitrina
@@ -21,11 +21,6 @@ import java.util.List;
  */
 @Schema(description = "Campos editables del perfil propio")
 public record ActualizarPerfilRequest(
-
-        @NotBlank(message = "El nombre es obligatorio.")
-        @Size(max = 150, message = "El nombre no puede superar los 150 caracteres.")
-        @Schema(description = "Nombre para mostrar", example = "Juana Pérez")
-        String nombre,
 
         @Size(max = 120, message = "La carrera no puede superar los 120 caracteres.")
         @Schema(description = "Carrera", example = "Ingeniería en Informática")
