@@ -118,3 +118,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--tinta-suave); }
 .dato-fijo span{display:block;font-size:13px;font-weight:600;color:var(--tinta-suave);margin-bottom:2px}
 .dato-fijo strong{display:block;font-size:15px}
 .dato-fijo em{display:block;font-size:12px;color:var(--tinta-suave);font-style:normal;margin-top:3px}
+
+/* Rol leído del token, junto al correo en la cabecera. */
+.insignia-rol{font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.04em;
+  padding:3px 7px;border-radius:99px;background:var(--azul);color:#fff}

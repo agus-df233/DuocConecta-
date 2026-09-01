@@ -7,7 +7,7 @@
 // el código corre en el navegador a la vista de cualquiera. PKCE es justamente lo que reemplaza
 // al secreto en clientes públicos.
 
-import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/msal-browser'
+import { PublicClientApplication, InteractionRequiredAuthError, EventType } from '@azure/msal-browser'
 
 export const configuracionMsal = {
   auth: {
@@ -69,4 +69,56 @@ export async function obtenerToken() {
     }
     throw error
   }
+}
+
+/**
+ * Devuelve el contenido del access token ya decodificado.
+ *
+ * Un JWT son tres partes separadas por punto; la del medio son los datos, codificados en
+ * base64url. Acá solo se leen: la firma la verifica el backend, que es quien tiene las claves
+ * públicas de Microsoft. Lo que el navegador decodifica sirve para mostrar información, nunca
+ * para decidir permisos.
+ */
+export async function claimsDelToken() {
+  const token = await obtenerToken()
+  const cuerpo = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+  return JSON.parse(decodeURIComponent(escape(atob(cuerpo))))
+}
+
+/**
+ * Roles que Azure AD asignó a la persona, leídos del claim 'roles'.
+ *
+ * Viene vacío cuando el tenant no usa App Roles: en ese caso el rol lo deduce el backend a
+ * partir del dominio del correo. Esa regla no se duplica acá a propósito — si viviera en los
+ * dos lados, tarde o temprano se desincronizarían.
+ */
+export async function rolesDelToken() {
+  const claims = await claimsDelToken()
+  const roles = claims.roles ?? []
+  return roles.map((r) => r.toUpperCase())
+}
+
+/** Permisos que el token habilita sobre la API, leídos del claim 'scp'. */
+export async function scopesDelToken() {
+  const claims = await claimsDelToken()
+  return (claims.scp ?? '').split(' ').filter(Boolean)
+}
+
+/**
+ * Avisa cuando cambia la sesión: alguien entró, salió, o el token dejó de renovarse.
+ *
+ * Sin esto la pantalla se queda como estaba aunque la sesión ya no sirva, y la persona ve
+ * vistas vacías sin entender por qué. Devuelve una función para dejar de escuchar.
+ */
+export function alCambiarSesion(callback) {
+  const id = msal.addEventCallback((evento) => {
+    const relevantes = [
+      EventType.LOGIN_SUCCESS,
+      EventType.LOGOUT_SUCCESS,
+      EventType.ACQUIRE_TOKEN_SUCCESS,
+      EventType.ACQUIRE_TOKEN_FAILURE,
+    ]
+    if (relevantes.includes(evento.eventType)) callback(cuentaActual())
+  })
+  return () => { if (id) msal.removeEventCallback(id) }
 }

@@ -1,13 +1,17 @@
 // Estructura de la aplicación: pantalla de login si no hay sesión, o la app con sus
 // dos vistas (Perfil y Vitrina) si el usuario ya entró.
 import { useEffect, useState } from 'react'
-import { cuentaActual, iniciarSesion, cerrarSesion, obtenerToken } from './auth'
+import { cuentaActual, iniciarSesion, cerrarSesion, claimsDelToken, rolesDelToken, alCambiarSesion } from './auth'
 import Perfil from './Perfil'
 import Vitrina from './Vitrina'
 
 export default function App() {
-  const cuenta = cuentaActual()
+  // La cuenta se guarda en estado y no se lee en cada render: así, cuando la sesión se pierde
+  // o se cierra, la aplicación vuelve sola al login en vez de quedar mostrando vistas vacías.
+  const [cuenta, setCuenta] = useState(cuentaActual())
   const [vista, setVista] = useState('vitrina')
+
+  useEffect(() => alCambiarSesion(setCuenta), [])
 
   if (!cuenta) return <Login />
 
@@ -31,6 +35,7 @@ export default function App() {
         </nav>
         <div className="sesion">
           <span>{cuenta.username}</span>
+          <RolDelUsuario />
           <button className="secundario" onClick={cerrarSesion}>Cerrar sesión</button>
         </div>
       </header>
@@ -82,13 +87,8 @@ function Diagnostico() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    obtenerToken()
-      .then((token) => {
-        // El JWT son tres partes separadas por punto; la del medio son los datos, en base64url.
-        const cuerpo = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-        setClaims(JSON.parse(decodeURIComponent(escape(atob(cuerpo)))))
-      })
-      .catch((e) => setError(e.message))
+    // La decodificación vive en auth.js, junto al resto del manejo del token.
+    claimsDelToken().then(setClaims).catch((e) => setError(e.message))
   }, [])
 
   if (error) return <div className="error">{error}</div>
@@ -118,4 +118,23 @@ function Diagnostico() {
       </details>
     </section>
   )
+}
+
+/**
+ * Muestra el rol de la persona, leído de los claims del token.
+ *
+ * Azure AD entrega los App Roles en el claim `roles`. Cuando el tenant no los usa, ese claim
+ * viene vacío y el rol lo deduce el backend a partir del dominio del correo: en ese caso acá
+ * no se muestra nada y el rol aparece igual en la pantalla de perfil. La regla de dominios no
+ * se repite en el navegador a propósito, para que no pueda quedar desincronizada del backend.
+ */
+function RolDelUsuario() {
+  const [roles, setRoles] = useState([])
+
+  useEffect(() => {
+    rolesDelToken().then(setRoles).catch(() => setRoles([]))
+  }, [])
+
+  if (roles.length === 0) return null
+  return <span className="insignia-rol">{roles.join(' · ')}</span>
 }
