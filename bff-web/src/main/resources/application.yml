@@ -15,6 +15,12 @@ spring:
           # El BFF valida el token con el mismo emisor y la misma audiencia que los
           # microservicios: es la primera de las tres capas de validación.
           issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+  
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:duocconecta}
+    password: ${RABBITMQ_PASSWORD:duocconecta}
 
 duocconecta:
   seguridad:

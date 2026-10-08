@@ -24,6 +24,15 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+  
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-duocconecta}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-duocconecta}
 
 volumes:
   datos-postgres:
