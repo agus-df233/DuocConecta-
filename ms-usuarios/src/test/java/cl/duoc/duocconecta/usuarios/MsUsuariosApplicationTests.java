@@ -2,7 +2,9 @@ package cl.duoc.duocconecta.usuarios;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,7 +36,7 @@ class MsUsuariosApplicationTests {
      * El contexto de Spring levanta sin errores.
      *
      * <p>Es la prueba más barata que existe y la que más problemas atrapa: si falta un bean,
-     * si dos configuraciones chocan o si el mapeo de una entidad está mal, falla acá.</p>
+     * si dos configuraciones chocan o si el mapeo de una entidad está mal, falla aquí.</p>
      */
     @Test
     @DisplayName("El contexto de la aplicación levanta correctamente")
@@ -117,6 +120,60 @@ class MsUsuariosApplicationTests {
     void dominioExternoRecibe403() throws Exception {
         mockMvc.perform(get("/api/v1/usuarios/me").with(tokenDe("alguien@gmail.com")))
                 .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Un token sin rol de la plataforma recibe 403, no 500.
+     *
+     * <p>Es el camino que produce {@code @PreAuthorize} cuando las authorities no alcanzan, y el
+     * único que ninguna otra prueba cubre: las demás inyectan {@code ROLE_ESTUDIANTE} a mano, así
+     * que la anotación las deja pasar. Sin esta prueba, un manejador genérico de {@code Exception}
+     * puede convertir el 403 en 500 sin que nada lo delate.</p>
+     */
+    @Test
+    @DisplayName("Un token sin rol recibe 403 y no 500")
+    void tokenSinRolRecibe403() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/me").with(jwt()
+                        .jwt(token -> token
+                                .claim("oid", "oid-sin-rol")
+                                .claim("email", "sin.rol@duocuc.cl")
+                                .claim("name", "Sin Rol"))))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Una ruta que no existe es 404, no un error interno. */
+    @Test
+    @DisplayName("Una ruta inexistente responde 404")
+    void rutaInexistenteResponde404() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/no-existe/tampoco").with(tokenDe("ana@duocuc.cl")))
+                .andExpect(status().isNotFound());
+    }
+
+    /** Un verbo que el endpoint no acepta es 405. */
+    @Test
+    @DisplayName("Un verbo no soportado responde 405")
+    void verboNoSoportadoResponde405() throws Exception {
+        mockMvc.perform(delete("/api/v1/usuarios/me").with(tokenDe("ana@duocuc.cl")))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    /** Un cuerpo que no es JSON válido es culpa de quien llama: 400. */
+    @Test
+    @DisplayName("Un cuerpo mal formado responde 400")
+    void cuerpoMalFormadoResponde400() throws Exception {
+        mockMvc.perform(put("/api/v1/usuarios/me")
+                        .with(tokenDe("ana@duocuc.cl"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{esto no es json"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** Un identificador con formato inválido es 400, no un error interno. */
+    @Test
+    @DisplayName("Un identificador con formato inválido responde 400")
+    void identificadorInvalidoResponde400() throws Exception {
+        mockMvc.perform(get("/api/v1/usuarios/no-es-un-uuid").with(tokenDe("ana@duocuc.cl")))
+                .andExpect(status().isBadRequest());
     }
 
     /**

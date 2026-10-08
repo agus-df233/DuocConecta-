@@ -1,11 +1,7 @@
-// Autenticación contra Azure AD (Microsoft Entra ID).
-//
-// Concentra todo lo relativo a MSAL: la configuración del cliente y la obtención del token
-// que después se manda al BFF. Ningún otro archivo habla con MSAL directamente.
+// Autenticación contra Azure AD. Ningún otro archivo habla con MSAL directamente.
 //
 // El flujo es Authorization Code + PKCE. No hay client secret porque un SPA no puede guardarlo:
-// el código corre en el navegador a la vista de cualquiera. PKCE es justamente lo que reemplaza
-// al secreto en clientes públicos.
+// el código corre en el navegador a la vista de cualquiera.
 
 import { PublicClientApplication, InteractionRequiredAuthError, EventType } from '@azure/msal-browser'
 
@@ -51,10 +47,8 @@ export function cerrarSesion() {
 }
 
 /**
- * Devuelve un access token válido para llamar al BFF.
- *
- * Primero lo intenta en silencio, usando el token en caché o renovándolo sin molestar al usuario.
- * Solo si Azure pide intervención humana (consentimiento, MFA, sesión vencida) lo manda al login.
+ * Un access token válido. Primero en silencio, desde la caché o renovándolo; solo si Azure pide
+ * intervención humana manda al login.
  */
 export async function obtenerToken() {
   const cuenta = cuentaActual()
@@ -72,12 +66,8 @@ export async function obtenerToken() {
 }
 
 /**
- * Devuelve el contenido del access token ya decodificado.
- *
- * Un JWT son tres partes separadas por punto; la del medio son los datos, codificados en
- * base64url. Acá solo se leen: la firma la verifica el backend, que es quien tiene las claves
- * públicas de Microsoft. Lo que el navegador decodifica sirve para mostrar información, nunca
- * para decidir permisos.
+ * El contenido del token, decodificado. Un JWT son tres partes separadas por punto y la del medio
+ * son los datos. Aquí solo se leen para mostrar: la firma la verifica el backend, nunca el navegador.
  */
 export async function claimsDelToken() {
   const token = await obtenerToken()
@@ -86,11 +76,8 @@ export async function claimsDelToken() {
 }
 
 /**
- * Roles que Azure AD asignó a la persona, leídos del claim 'roles'.
- *
- * Viene vacío cuando el tenant no usa App Roles: en ese caso el rol lo deduce el backend a
- * partir del dominio del correo. Esa regla no se duplica acá a propósito — si viviera en los
- * dos lados, tarde o temprano se desincronizarían.
+ * Los App Roles del token. Viene vacío si el tenant no los usa; entonces el rol lo deduce el
+ * backend del dominio del correo. Esa regla no se duplica aquí: se desincronizaría.
  */
 export async function rolesDelToken() {
   const claims = await claimsDelToken()
@@ -105,10 +92,8 @@ export async function scopesDelToken() {
 }
 
 /**
- * Avisa cuando cambia la sesión: alguien entró, salió, o el token dejó de renovarse.
- *
- * Sin esto la pantalla se queda como estaba aunque la sesión ya no sirva, y la persona ve
- * vistas vacías sin entender por qué. Devuelve una función para dejar de escuchar.
+ * Avisa cuando la sesión cambia. Sin esto la pantalla se queda como estaba aunque la sesión ya
+ * no sirva. Devuelve una función para dejar de escuchar.
  */
 export function alCambiarSesion(callback) {
   const id = msal.addEventCallback((evento) => {

@@ -31,6 +31,8 @@
     <modules>
         <module>common-seguridad</module>
         <module>ms-usuarios</module>
+        <module>ms-proyectos</module>
+        <module>ms-contacto</module>
         <module>bff-web</module>
     </modules>
 
@@ -40,6 +42,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring-security.version>7.1.1</spring-security.version>
 
+        <aws.sdk.version>2.35.9</aws.sdk.version>
         <springdoc.version>3.1.0</springdoc.version>
     </properties>
 
@@ -50,6 +53,15 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+
+            <!-- SDK de AWS. Solo ms-proyectos lo usa, para firmar la subida de adjuntos a S3. -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Módulo propio con la validación de JWT compartida por todos los servicios. -->

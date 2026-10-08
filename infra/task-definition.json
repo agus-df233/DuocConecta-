@@ -1,9 +1,13 @@
 {
   "_comentario": [
-    "Task definition única de DuocConecta: los tres servicios corren como contenedores de UNA misma",
+    "Task definition única de DuocConecta: los cuatro servicios corren como contenedores de UNA misma",
     "tarea de Fargate. Se hace así porque AWS Cloud Map no está habilitado en el Learner Lab y sin",
     "él no hay descubrimiento de servicios; al compartir tarea, los contenedores comparten interfaz",
-    "de red y el BFF llega a los microservicios por http://localhost:8081 y :8082.",
+    "de red y el BFF llega a los microservicios por http://localhost:8081, :8082 y :8083.",
+    "",
+    "Cada contenedor lleva un tope de memoria propio: con cuatro JVM en la misma tarea, sin topes",
+    "la primera en arrancar se queda con casi toda la RAM y las demás mueren por falta de memoria.",
+    "El heap lo acota la propia imagen con MaxRAMPercentage, así que acá no se repite.",
     "",
     "Los valores __ASI__ son placeholders que infra/aws.sh reemplaza al desplegar. Nunca se guardan",
     "credenciales acá: la contraseña de RDS se inyecta desde Secrets Manager por ARN.",
@@ -14,8 +18,8 @@
   "family": "duocconecta",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "3072",
+  "cpu": "2048",
+  "memory": "4096",
   "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/LabRole",
   "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/LabRole",
   "containerDefinitions": [
@@ -23,9 +27,11 @@
       "name": "ms-usuarios",
       "image": "__REGISTRO__/duocconecta/ms-usuarios:__TAG__",
       "essential": true,
+      "memory": 1024,
       "portMappings": [{ "containerPort": 8081, "protocol": "tcp" }],
       "environment": [
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
         { "name": "DB_USER", "value": "duocconecta" }
@@ -54,12 +60,15 @@
       "name": "bff-web",
       "image": "__REGISTRO__/duocconecta/bff-web:__TAG__",
       "essential": true,
+      "memory": 1024,
       "portMappings": [{ "containerPort": 8080, "protocol": "tcp" }],
       "environment": [
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
         { "name": "MS_USUARIOS_URL", "value": "http://localhost:8081" },
         { "name": "MS_PROYECTOS_URL", "value": "http://localhost:8082" },
+        { "name": "MS_CONTACTO_URL", "value": "http://localhost:8083" },
         { "name": "CORS_ORIGENES", "value": "__CORS_ORIGENES__" }
       ],
       "dependsOn": [
@@ -86,12 +95,16 @@
       "name": "ms-proyectos",
       "image": "__REGISTRO__/duocconecta/ms-proyectos:__TAG__",
       "essential": true,
+      "memory": 1024,
       "portMappings": [{ "containerPort": 8082, "protocol": "tcp" }],
       "environment": [
         { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
         { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
         { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
-        { "name": "DB_USER", "value": "duocconecta" }
+        { "name": "DB_USER", "value": "duocconecta" },
+        { "name": "S3_BUCKET_ADJUNTOS", "value": "__BUCKET_ADJUNTOS__" },
+        { "name": "AWS_REGION", "value": "__REGION__" }
       ],
       "secrets": [
         { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
@@ -107,6 +120,39 @@
       },
       "healthCheck": {
         "command": ["CMD-SHELL", "wget -q -O - http://localhost:8082/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 90
+      }
+    },
+    {
+      "name": "ms-contacto",
+      "image": "__REGISTRO__/duocconecta/ms-contacto:__TAG__",
+      "essential": true,
+      "memory": 1024,
+      "portMappings": [{ "containerPort": 8083, "protocol": "tcp" }],
+      "environment": [
+        { "name": "AZURE_TENANT_ID", "value": "__AZURE_TENANT_ID__" },
+        { "name": "LOG_NIVEL", "value": "__LOG_NIVEL__" },
+        { "name": "AZURE_CLIENT_ID", "value": "__AZURE_CLIENT_ID__" },
+        { "name": "DB_URL", "value": "jdbc:postgresql://__RDS_ENDPOINT__:5432/duocconecta" },
+        { "name": "DB_USER", "value": "duocconecta" }
+      ],
+      "secrets": [
+        { "name": "DB_PASSWORD", "valueFrom": "__SECRETO_DB_ARN__:password::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/duocconecta",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "ms-contacto",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health || exit 1"],
         "interval": 30,
         "timeout": 5,
         "retries": 3,

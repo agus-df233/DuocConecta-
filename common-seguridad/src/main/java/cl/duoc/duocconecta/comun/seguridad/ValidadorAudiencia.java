@@ -8,19 +8,17 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 /**
- * Verifica que el token haya sido emitido para esta API y no para otra aplicación del tenant.
+ * Verifica que el token sea para esta API y no para otra aplicación del tenant.
  *
- * <p>Spring valida por defecto la firma, la vigencia y el emisor, pero no la audiencia. Sin esta
- * comprobación, un token válido emitido para cualquier otra aplicación del mismo tenant de Azure AD
- * sería aceptado. Es el error clásico de "confused deputy".</p>
+ * <p>Spring valida firma, vigencia y emisor, pero <strong>no la audiencia</strong>: sin esto se
+ * aceptaría cualquier token del tenant. Es el ataque de "confused deputy".</p>
  *
- * <p>El error típico acá es que el frontend haya pedido solo los scopes de OIDC
- * ({@code openid profile}): en ese caso Microsoft devuelve un ID token cuya audiencia es el
- * client-id del SPA, no el de la API, y este validador lo rechaza.</p>
+ * <p>Suele fallar cuando el frontend pide solo {@code openid profile}: Microsoft devuelve un ID
+ * token cuya audiencia es el SPA, no la API.</p>
  */
 public class ValidadorAudiencia implements OAuth2TokenValidator<Jwt> {
 
-    /** Audiencia esperada: el client-id del registro de la API en Azure AD. */
+    /** El client-id del registro de la API en Azure AD. */
     private final String audienciaEsperada;
 
     public ValidadorAudiencia(String audienciaEsperada) {
@@ -28,11 +26,8 @@ public class ValidadorAudiencia implements OAuth2TokenValidator<Jwt> {
     }
 
     /**
-     * Comprueba que la audiencia esperada esté entre las del token.
-     *
-     * <p>El claim {@code aud} puede traer varios valores, por eso se busca en la lista completa.
-     * También se acepta la forma {@code api://<client-id>} porque Azure AD la usa en algunos
-     * tokens según cómo esté configurado el Application ID URI.</p>
+     * El claim {@code aud} puede traer varios valores. Se acepta también {@code api://<client-id>},
+     * que es la forma que usa Azure AD según cómo esté configurado el Application ID URI.
      */
     @Override
     public OAuth2TokenValidatorResult validate(Jwt token) {
@@ -44,11 +39,10 @@ public class ValidadorAudiencia implements OAuth2TokenValidator<Jwt> {
             return OAuth2TokenValidatorResult.success();
         }
 
-        // No se incluye la audiencia recibida en el mensaje: iría al cliente y no aporta
-        // nada a quien no debería conocer la configuración del tenant.
+        // La audiencia recibida no va en el mensaje: iría al cliente.
         OAuth2Error error = new OAuth2Error(
                 OAuth2ErrorCodes.INVALID_TOKEN,
-                "El token no fue emitido para esta API. Verificá que el cliente esté pidiendo el "
+                "El token no fue emitido para esta API. Verifica que el cliente esté pidiendo el "
                         + "scope de la API (api://<client-id>/access_as_user) y no solo openid/profile.",
                 null);
         return OAuth2TokenValidatorResult.failure(error);

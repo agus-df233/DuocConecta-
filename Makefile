@@ -6,10 +6,12 @@
 #   make desplegar                    Construye las imágenes, las sube y actualiza el servicio.
 #   make desplegar SERVICIO=bff-web   Igual, pero sube solo ese servicio.
 #   make iniciar / make apagar        Prende y apaga las tareas. APAGAR al terminar la jornada.
+#   make publicar                     Publica el frontend en S3 y actualiza el API Manager.
 #   make local                        Levanta Postgres y compila todo en la máquina.
+#   make dev                          Sirve el frontend en localhost:5173.
 #   make test                         Corre la suite completa.
 
-.PHONY: verificar crear desplegar iniciar apagar urls local test front limpiar
+.PHONY: verificar crear desplegar publicar iniciar apagar urls local test dev limpiar
 
 # Si no se indica SERVICIO, se construyen los que existan en el repo.
 SERVICIO ?=
@@ -24,7 +26,8 @@ desplegar:
 ifeq ($(SERVICIO),)
 	./infra/aws.sh build ms-usuarios
 	./infra/aws.sh build bff-web
-	@test -d ms-proyectos && ./infra/aws.sh build ms-proyectos || echo "  ! ms-proyectos aún no existe, se omite"
+	./infra/aws.sh build ms-proyectos
+	./infra/aws.sh build ms-contacto
 else
 	./infra/aws.sh build $(SERVICIO)
 endif
@@ -50,8 +53,13 @@ local:
 test:
 	mvn test
 
-front:
+# Sirve el frontend en la máquina, contra el backend local.
+dev:
 	cd frontend-web && npm install && npm run dev
+
+# Compila el frontend y lo publica en S3, y deja las rutas del API Manager al día.
+publicar:
+	./infra/aws.sh front
 
 limpiar:
 	mvn -q clean

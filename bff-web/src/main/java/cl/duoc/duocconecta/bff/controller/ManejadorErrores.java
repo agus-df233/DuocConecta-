@@ -1,7 +1,7 @@
 package cl.duoc.duocconecta.bff.controller;
 
-import cl.duoc.duocconecta.comun.seguridad.CorreoNoPresenteException;
-import cl.duoc.duocconecta.comun.seguridad.DominioNoPermitidoException;
+import cl.duoc.duocconecta.comun.seguridad.ManejadorErroresBase;
+import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -10,77 +10,75 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
- * Traduce a respuestas HTTP los errores del BFF, incluidos los que vienen de los microservicios.
+ * Errores propios del BFF: los que llegan desde los microservicios.
+ * Los comunes vienen de {@link ManejadorErroresBase}.
  */
 @RestControllerAdvice
-public class ManejadorErrores {
+public class ManejadorErrores extends ManejadorErroresBase {
 
     private static final Logger log = LoggerFactory.getLogger(ManejadorErrores.class);
+    private static final String SIN_MOTIVO = "El servicio rechazó la petición y no explicó por qué.";
 
-    /** El correo del token no pertenece a un dominio institucional autorizado. */
-    @ExceptionHandler(DominioNoPermitidoException.class)
-    public ProblemDetail manejarDominioNoPermitido(DominioNoPermitidoException excepcion) {
-        log.warn("Se rechazó un acceso desde el dominio no autorizado '{}'.", excepcion.getDominio());
+    private final ObjectMapper json;
 
-        ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problema.setTitle("Dominio no autorizado");
-        problema.setDetail("Tu correo no pertenece a un dominio institucional de Duoc UC. "
-                + "Entrá con tu cuenta @duocuc.cl, @profesor.duoc.cl o @duoc.cl.");
-        return problema;
-    }
-
-    /** El token es válido pero no trae el correo del usuario. */
-    @ExceptionHandler(CorreoNoPresenteException.class)
-    public ProblemDetail manejarCorreoAusente(CorreoNoPresenteException excepcion) {
-        log.error("Token sin claim de correo: {}", excepcion.getMessage());
-
-        ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
-        problema.setTitle("No se pudo determinar tu correo institucional");
-        problema.setDetail("El token no incluye tu correo, así que no se puede asignar un rol. "
-                + "Avisá al equipo: falta configurar los claims opcionales del access token en Azure AD.");
-        return problema;
+    public ManejadorErrores(ObjectMapper json) {
+        this.json = json;
     }
 
     /**
      * Un microservicio respondió con un error.
      *
-     * <p>Los errores del propio usuario (4xx) se devuelven tal cual, porque son suyos y necesita
-     * verlos. Los del servidor (5xx) se convierten en 502: el problema es del backend, no de quien
-     * hizo la petición.</p>
+     * <p>Los 4xx se devuelven tal cual porque son del usuario y necesita verlos. Los 5xx pasan a
+     * 502: el problema es del backend, no de quien hizo la petición.</p>
      */
     @ExceptionHandler(HttpStatusCodeException.class)
     public ProblemDetail manejarErrorDeMicroservicio(HttpStatusCodeException excepcion) {
-        HttpStatus estadoRecibido = HttpStatus.valueOf(excepcion.getStatusCode().value());
+        HttpStatus estado = HttpStatus.valueOf(excepcion.getStatusCode().value());
 
-        if (estadoRecibido.is4xxClientError()) {
-            ProblemDetail problema = ProblemDetail.forStatus(estadoRecibido);
-            problema.setTitle("La petición fue rechazada");
-            problema.setDetail("ms-usuarios rechazó la petición con el estado "
-                    + estadoRecibido.value() + ".");
-            return problema;
+        if (estado.is4xxClientError()) {
+            String motivo = motivoDelMicroservicio(excepcion);
+            log.warn("Microservicio rechazó con {}: {}", estado.value(), motivo);
+            return problema(estado, "La petición fue rechazada", motivo);
         }
 
-        log.error("ms-usuarios respondió {} al BFF.", estadoRecibido.value(), excepcion);
-        ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.BAD_GATEWAY);
-        problema.setTitle("Error en un servicio interno");
-        problema.setDetail("No se pudo completar la operación porque un servicio interno falló. "
-                + "Intentá de nuevo en unos momentos.");
-        return problema;
+        log.error("Microservicio respondió {}", estado.value(), excepcion);
+        return problema(HttpStatus.BAD_GATEWAY, "Error en un servicio interno",
+                "No se pudo completar la operación porque un servicio interno falló. "
+                        + "Intenta de nuevo en unos momentos.");
     }
 
     /**
-     * No se pudo contactar al microservicio: está caído, o se agotó el tiempo de espera.
+     * Saca el motivo del cuerpo del microservicio.
+     *
+     * <p>Los cuatro servicios responden Problem Details, así que basta con leer {@code detail}.</p>
      */
+    private String motivoDelMicroservicio(HttpStatusCodeException excepcion) {
+        String cuerpo = excepcion.getResponseBodyAsString(StandardCharsets.UTF_8);
+        if (cuerpo == null || cuerpo.isBlank()) {
+            return SIN_MOTIVO;
+        }
+        try {
+            JsonNode detalle = json.readTree(cuerpo).path("detail");
+            return detalle.isTextual() && !detalle.stringValue().isBlank()
+                    ? detalle.stringValue()
+                    : SIN_MOTIVO;
+        } catch (RuntimeException noEsJson) {
+            // Un 403 de la cadena de filtros llega como texto plano, no como JSON.
+            log.warn("Cuerpo de error no interpretable: {}", cuerpo);
+            return SIN_MOTIVO;
+        }
+    }
+
+    /** No se pudo contactar al microservicio: está caído o se agotó la espera. */
     @ExceptionHandler(ResourceAccessException.class)
     public ProblemDetail manejarMicroservicioInalcanzable(ResourceAccessException excepcion) {
-        log.error("No se pudo contactar a ms-usuarios desde el BFF.", excepcion);
-
-        ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE);
-        problema.setTitle("Servicio no disponible");
-        problema.setDetail("El servicio de usuarios no está respondiendo. "
-                + "Verificá que ms-usuarios esté levantado e intentá de nuevo.");
-        return problema;
+        log.error("No se pudo contactar a un microservicio", excepcion);
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Servicio no disponible",
+                "Un servicio interno no está respondiendo. "
+                        + "Verifica que los microservicios estén levantados e intenta de nuevo.");
     }
 }

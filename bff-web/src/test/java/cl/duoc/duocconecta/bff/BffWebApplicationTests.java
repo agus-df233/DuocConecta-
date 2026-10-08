@@ -1,6 +1,7 @@
 package cl.duoc.duocconecta.bff;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -47,6 +48,14 @@ class BffWebApplicationTests {
                 .andExpect(status().isUnauthorized());
     }
 
+    /** Las colaboraciones son tan privadas como el perfil: sin token, 401. */
+    @Test
+    @DisplayName("GET /api/v1/bff/colaboraciones/recibidas sin token responde 401")
+    void colaboracionesSinTokenDevuelve401() throws Exception {
+        mockMvc.perform(get("/api/v1/bff/colaboraciones/recibidas"))
+                .andExpect(status().isUnauthorized());
+    }
+
     /** El endpoint de salud queda abierto para el monitoreo. */
     @Test
     @DisplayName("GET /actuator/health responde 200 sin token")
@@ -82,5 +91,37 @@ class BffWebApplicationTests {
                         .header("Origin", "https://sitio-no-autorizado.example")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden());
+    }
+
+    /**
+     * Un token sin rol de la plataforma recibe 403, no 500.
+     *
+     * <p>Es el rechazo de {@code @PreAuthorize}, y hasta ahora ninguna prueba lo cubría. Importa
+     * doblemente en el BFF: un 5xx suyo se traduciría a 502 y el frontend mostraría un mensaje
+     * genérico en vez de decir que faltan permisos.</p>
+     */
+    @Test
+    @DisplayName("Un token sin rol recibe 403 y no 500")
+    void tokenSinRolRecibe403() throws Exception {
+        mockMvc.perform(get("/api/v1/bff/mi-perfil").with(jwt()
+                        .jwt(token -> token
+                                .claim("oid", "oid-sin-rol")
+                                .claim("email", "sin.rol@duocuc.cl")
+                                .claim("name", "Sin Rol"))))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Una ruta que no existe es 404, no un error interno. */
+    @Test
+    @DisplayName("Una ruta inexistente responde 404")
+    void rutaInexistenteResponde404() throws Exception {
+        mockMvc.perform(get("/api/v1/bff/no-existe").with(jwt()
+                        .jwt(token -> token
+                                .claim("oid", "oid-ana")
+                                .claim("email", "ana@duocuc.cl")
+                                .claim("name", "Ana"))
+                        .authorities(new org.springframework.security.core.authority
+                                .SimpleGrantedAuthority("ROLE_ESTUDIANTE"))))
+                .andExpect(status().isNotFound());
     }
 }

@@ -5,5 +5,8 @@
 -- Schema de ms-usuarios: perfiles, roles y datos de contacto.
 CREATE SCHEMA IF NOT EXISTS usuarios;
 
--- Reservado para ms-proyectos (Fase 3, todavía no implementado).
+-- Schema de ms-proyectos: la vitrina de proyectos.
 CREATE SCHEMA IF NOT EXISTS proyectos;
+
+-- Schema de ms-contacto: solicitudes de colaboración y consentimiento.
+CREATE SCHEMA IF NOT EXISTS contacto;

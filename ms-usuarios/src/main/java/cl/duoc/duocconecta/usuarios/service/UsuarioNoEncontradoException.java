@@ -17,4 +17,9 @@ public class UsuarioNoEncontradoException extends RuntimeException {
     public UsuarioNoEncontradoException(UUID id) {
         super("No existe un perfil visible con el identificador " + id + ".");
     }
+
+    /** Cuando la búsqueda fue por el identificador de Azure AD y no por el id interno. */
+    public UsuarioNoEncontradoException(String oid) {
+        super("No existe un perfil visible para el usuario " + oid + ".");
+    }
 }
