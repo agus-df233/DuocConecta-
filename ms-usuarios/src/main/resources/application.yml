@@ -43,6 +43,12 @@ spring:
           # con v1.0 la validación del emisor falla.
           issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:duocconecta}
+    password: ${RABBITMQ_PASSWORD:duocconecta}
+
 duocconecta:
   seguridad:
     # Client-id del registro de la API en Azure AD. Es la audiencia que debe traer el token.
