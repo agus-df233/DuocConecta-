@@ -142,7 +142,7 @@ public class Usuario {
      *
      * <p>Se dejan afuera a propósito el nombre, el correo, el rol y el {@code oidEntra}: vienen del
      * token y no se cambian desde la API. El nombre en particular se resincroniza en cada ingreso
-     * con {@link #sincronizarDesdeToken}, así que si se pudiera editar acá, el valor escrito a mano
+     * con {@link #sincronizarDesdeToken}, así que si se pudiera editar aquí, el valor escrito a mano
      * se perdería la próxima vez que la persona entrara.</p>
      */
     public void actualizarPerfil(String carrera, String sede, String bio,

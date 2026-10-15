@@ -12,6 +12,12 @@ public class PropiedadesBff {
     /** URL base de ms-usuarios. */
     private String urlMsUsuarios = "http://localhost:8081";
 
+    /** URL base de ms-proyectos, la vitrina. */
+    private String urlMsProyectos = "http://localhost:8082";
+
+    /** URL base de ms-contacto, que gestiona las solicitudes de colaboración. */
+    private String urlMsContacto = "http://localhost:8083";
+
     /** Cuánto se espera una respuesta de un microservicio antes de darla por perdida, en segundos. */
     private int timeoutSegundos = 5;
 
@@ -24,6 +30,22 @@ public class PropiedadesBff {
 
     public void setUrlMsUsuarios(String urlMsUsuarios) {
         this.urlMsUsuarios = urlMsUsuarios;
+    }
+
+    public String getUrlMsProyectos() {
+        return urlMsProyectos;
+    }
+
+    public void setUrlMsProyectos(String urlMsProyectos) {
+        this.urlMsProyectos = urlMsProyectos;
+    }
+
+    public String getUrlMsContacto() {
+        return urlMsContacto;
+    }
+
+    public void setUrlMsContacto(String urlMsContacto) {
+        this.urlMsContacto = urlMsContacto;
     }
 
     public int getTimeoutSegundos() {

@@ -44,6 +44,21 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- ManejadorErroresBase traduce las violaciones de jakarta.validation.
+             La aplicación que use el módulo ya trae la implementación. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- DocumentacionApi arma el objeto OpenAPI. La UI de Swagger la trae cada servicio. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Genera los metadatos para el autocompletado de application.yml en el IDE. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

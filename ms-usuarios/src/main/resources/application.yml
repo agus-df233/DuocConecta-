@@ -1,5 +1,5 @@
 # Configuración de ms-usuarios.
-# Ningún valor sensible está escrito acá: todo viene por variable de entorno.
+# Ningún valor sensible está escrito aquí: todo viene por variable de entorno.
 # Los valores por defecto son solo para levantar el entorno local con docker compose.
 
 server:
@@ -42,6 +42,12 @@ spring:
           # Emisor del tenant de Azure AD. La versión v2.0 es obligatoria:
           # con v1.0 la validación del emisor falla.
           issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+  
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:duocconecta}
+    password: ${RABBITMQ_PASSWORD:duocconecta}
 
 duocconecta:
   seguridad:
@@ -69,7 +75,7 @@ duocconecta:
     # Claim con los App Roles de Azure AD. Si viene vacío, el rol se deriva del dominio.
     claim-roles: roles
 
-    # Mapa de dominio de correo a rol. Sumar un dominio nuevo es agregar una línea acá:
+    # Mapa de dominio de correo a rol. Sumar un dominio nuevo es agregar una línea aquí:
     # no hace falta tocar el código.
     dominios:
       duocuc.cl: ESTUDIANTE
@@ -95,7 +101,12 @@ springdoc:
 
 logging:
   level:
-    cl.duoc.duocconecta: INFO
+    # Se sube a DEBUG en la nube con la variable LOG_NIVEL, sin reconstruir la imagen.
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    # El identificador de correlación va en cada línea: es lo que permite seguir una misma
+    # petición entre el BFF y los microservicios en un solo grupo de CloudWatch.
+    level: "%5p [%X{idPeticion:-sin-id}]"
 
 ---
 # Perfil de desarrollo: agrega datos de ejemplo para poder mostrar la vitrina

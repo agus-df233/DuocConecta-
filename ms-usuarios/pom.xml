@@ -24,6 +24,11 @@
             <groupId>cl.duoc.duocconecta</groupId>
             <artifactId>common-seguridad</artifactId>
         </dependency>
+        <dependency>
+            <groupId>cl.duoc.duocconecta</groupId>
+            <artifactId>common-mensajeria</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
 
         <!-- API REST. En Spring Boot 4 el starter de MVC se llama webmvc, no web. -->
         <dependency>
@@ -93,6 +98,10 @@
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
     </dependencies>
 

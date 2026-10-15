@@ -1,5 +1,5 @@
 # Configuración del BFF.
-# Ningún valor sensible está escrito acá: todo viene por variable de entorno.
+# Ningún valor sensible está escrito aquí: todo viene por variable de entorno.
 
 server:
   port: 8080
@@ -15,6 +15,12 @@ spring:
           # El BFF valida el token con el mismo emisor y la misma audiencia que los
           # microservicios: es la primera de las tres capas de validación.
           issuer-uri: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
+  
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:duocconecta}
+    password: ${RABBITMQ_PASSWORD:duocconecta}
 
 duocconecta:
   seguridad:
@@ -39,6 +45,8 @@ duocconecta:
 
   bff:
     url-ms-usuarios: ${MS_USUARIOS_URL:http://localhost:8081}
+    url-ms-proyectos: ${MS_PROYECTOS_URL:http://localhost:8082}
+    url-ms-contacto: ${MS_CONTACTO_URL:http://localhost:8083}
     # Si un microservicio no responde en este tiempo, se corta y se devuelve 503
     # en vez de dejar al frontend esperando.
     timeout-segundos: 5
@@ -66,7 +74,12 @@ springdoc:
 
 logging:
   level:
-    cl.duoc.duocconecta: INFO
+    # Se sube a DEBUG en la nube con la variable LOG_NIVEL, sin reconstruir la imagen.
+    cl.duoc.duocconecta: ${LOG_NIVEL:INFO}
+  pattern:
+    # El identificador de correlación va en cada línea: es lo que permite seguir una misma
+    # petición entre el BFF y los microservicios en un solo grupo de CloudWatch.
+    level: "%5p [%X{idPeticion:-sin-id}]"
 
 ---
 spring:

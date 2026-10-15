@@ -6,19 +6,14 @@ import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Propiedades de seguridad configurables desde {@code application.yml}, bajo el prefijo
- * {@code duocconecta.seguridad}.
+ * Configuración de seguridad, bajo {@code duocconecta.seguridad} en el YAML.
  *
- * <p>Acá vive el mapa de dominios de correo a roles. Está afuera del código a propósito:
- * pueden sumarse dominios nuevos sin recompilar nada.</p>
+ * <p>El mapa de dominios a roles vive aquí y no en el código: sumar un dominio no recompila nada.</p>
  */
 @ConfigurationProperties(prefix = "duocconecta.seguridad")
 public class PropiedadesSeguridad {
 
-    /**
-     * Audiencia esperada del token: el client-id del registro de la API en Azure AD.
-     * Un token emitido para otra aplicación se rechaza aunque la firma sea válida.
-     */
+    /** Client-id de la API. Un token de otra aplicación se rechaza aunque la firma sea válida. */
     private String audiencia;
 
     /**

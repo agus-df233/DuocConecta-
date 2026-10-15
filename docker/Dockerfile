@@ -1,7 +1,7 @@
 # Imagen de cualquiera de los microservicios de DuocConecta.
 #
-# Es UN solo Dockerfile para los tres servicios: cuál se construye lo decide el
-# argumento SERVICIO. Se hace así para que no existan tres archivos casi idénticos
+# Es UN solo Dockerfile para los cuatro servicios: cuál se construye lo decide el
+# argumento SERVICIO. Se hace así para que no existan cuatro archivos casi idénticos
 # que después se desincronizan.
 #
 #   docker build -f docker/Dockerfile --build-arg SERVICIO=ms-usuarios -t ms-usuarios .
@@ -16,11 +16,16 @@ WORKDIR /build
 
 # Primero solo los poms: si no cambian, Docker reutiliza la capa de dependencias
 # y no vuelve a bajar medio Maven Central en cada build.
+#
+# Van TODOS los módulos y no solo el que se compila: Maven lee el pom padre entero y
+# falla si un <module> declarado no está en el contexto, aunque no se vaya a construir.
 COPY pom.xml .
 COPY common-seguridad/pom.xml common-seguridad/
 COPY ms-usuarios/pom.xml      ms-usuarios/
+COPY ms-proyectos/pom.xml     ms-proyectos/
+COPY ms-contacto/pom.xml      ms-contacto/
 COPY bff-web/pom.xml          bff-web/
-RUN mvn -q -B dependency:go-offline -pl common-seguridad,ms-usuarios,bff-web || true
+RUN mvn -q -B dependency:go-offline -pl common-seguridad,ms-usuarios,ms-proyectos,ms-contacto,bff-web || true
 
 # Ahora el código y la compilación real del servicio pedido.
 COPY common-seguridad common-seguridad

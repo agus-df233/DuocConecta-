@@ -46,6 +46,7 @@ logs/
 # --- Documentación ---
 # Se trabaja aparte del repositorio; queda solo en la máquina de cada quien.
 docs/
+GUIA-EQUIPO.md
 
 # --- Infraestructura ---
 # Identificadores de recursos AWS generados por infra/aws.sh crear.
